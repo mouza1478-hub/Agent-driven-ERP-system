@@ -8,18 +8,21 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from langchain.agents import create_react_agent, AgentExecutor
+from tools.database_tools import execute_custom_query, get_financial_summary
 from langchain.tools import tool
 from langchain.output_parsers import StructuredOutputParser
 from config.llm import get_llm
 from config.prompts import get_react_prompt
 from config.database import execute_query
+from datetime import datetime, timedelta
 
 
 
 # --------------------- Tools for Analytics Agent ---------------------
-from config.database import execute_query
-from langchain.tools import tool
-from datetime import datetime, timedelta
+
+# ----------------- Sales Analytics -----------------
+
+# --------------------- Tools for Analytics Agent ---------------------
 
 # ----------------- Sales Analytics -----------------
 @tool
@@ -71,7 +74,8 @@ def get_sale_analytics(_: str) -> dict:
 
         # Average order value
         avg_order_query = "SELECT AVG(total) AS avg_order_value FROM orders;"
-        avg_order_value = execute_query(avg_order_query)
+        avg_order_value_result = execute_query(avg_order_query)
+        avg_order_value = avg_order_value_result[0]['avg_order_value'] if avg_order_value_result else 0
 
         # New customers in last 6 months
         new_customers_query = f"""
@@ -84,32 +88,51 @@ def get_sale_analytics(_: str) -> dict:
         """
         new_customers = execute_query(new_customers_query)
 
-        # Assemble result
-        result = {
+        # Final structured result
+        analytics = {
             "top_customers": top_customers,
             "sales_by_status": sales_by_status,
             "monthly_sales_last_6_months": monthly_sales,
-            "average_order_value": avg_order_value[0]['avg_order_value'] if avg_order_value else 0,
+            "average_order_value": avg_order_value,
             "new_customers_last_6_months": new_customers
         }
 
-        return result
+        # Formatted report
+        report = f"""
+SALES ANALYTICS REPORT
+========================
+TOP 10 CUSTOMERS:
+{chr(10).join([f"- {c['customer_name']}: {c['order_count']} orders, ${c['total_value']:.2f}" for c in top_customers])}
+
+SALES BY STATUS:
+{chr(10).join([f"- {c['status']}: {c['order_count']} orders, ${c['total_value']:.2f}" for c in sales_by_status])}
+
+MONTHLY SALES (LAST 6 MONTHS):
+{chr(10).join([f"- {c['month']}: {c['order_count']} orders, ${c['total_value']:.2f}" for c in monthly_sales])}
+
+AVERAGE ORDER VALUE: ${analytics['average_order_value']:.2f}
+
+NEW CUSTOMERS (LAST 6 MONTHS):
+{chr(10).join([f"- {c['month']}: {c['new_customers']} new customers" for c in new_customers])}
+""".strip()
+
+        return {"analytics": analytics, "report": report}
 
     except Exception as e:
         return {"error": str(e)}
 
 
-# ----------------- Customer Analytics -----------------
+# --------------------------------- Customer Analytics Tool ------------------------
 @tool
 def get_customer_analytics(_: str) -> dict:
     """
     Returns customer-related metrics including:
-    - Customer growth
-    - Customer activity (orders placed)
-    - Lead status
+    - Customer growth per month
+    - Customer activity (orders placed, total spent)
+    - Lead status and average score
     """
     try:
-        # Customer growth
+        # Customer growth per month
         customer_growth_query = """
         SELECT strftime('%Y-%m', created_at) AS month,
                COUNT(*) AS new_customers
@@ -119,7 +142,7 @@ def get_customer_analytics(_: str) -> dict:
         """
         customer_growth = execute_query(customer_growth_query)
 
-        # Customer activity
+        # Customer activity (orders and spending)
         customer_activity_query = """
         SELECT c.name AS customer_name,
                COUNT(o.id) AS order_count,
@@ -131,81 +154,116 @@ def get_customer_analytics(_: str) -> dict:
         """
         customer_activity = execute_query(customer_activity_query)
 
-        # Lead status
+        # Lead status and average score
         lead_status_query = """
-        SELECT status, COUNT(*) AS count
+        SELECT status,
+               COUNT(*) AS count,
+               AVG(CASE WHEN score IS NOT NULL THEN score ELSE 0 END) AS avg_score
         FROM leads
         GROUP BY status;
         """
         lead_status = execute_query(lead_status_query)
 
+        # Build a readable analytics report
+        report = f"""
+CUSTOMER ANALYTICS REPORT
+========================
+CUSTOMER GROWTH PER MONTH:
+{chr(10).join([f"- {c['month']}: {c['new_customers']} new customers" for c in customer_growth])}
+
+CUSTOMER ACTIVITY:
+{chr(10).join([f"- {c['customer_name']}: {c['order_count']} orders, ${c['total_spent']:.2f} spent" for c in customer_activity])}
+
+LEAD STATUS:
+{chr(10).join([f"- {c['status']}: {c['count']} leads, avg score {c['avg_score']:.2f}" for c in lead_status])}
+""".strip()
+
         return {
             "customer_growth": customer_growth,
             "customer_activity": customer_activity,
-            "lead_status": lead_status
+            "lead_status": lead_status,
+            "report": report
         }
 
     except Exception as e:
         return {"error": str(e)}
-
-
-# ----------------- Product Analytics -----------------
 @tool
-def get_product_analytics(_: str) -> dict:
-    """
-    Returns product-related metrics including:
-    - Top 10 products by sales
-    - Top 10 products by reviews
-    - Inventory summary
-    """
-    try:
-        # Top products by sales
-        top_products_query = """
-        SELECT p.name AS product_name,
-               SUM(oi.quantity) AS total_sold,
-               SUM(oi.price * oi.quantity) AS total_revenue
-        FROM products p
-        JOIN order_items oi ON p.id = oi.product_id
-        GROUP BY p.id, p.name
-        ORDER BY total_sold DESC
-        LIMIT 10;
-        """
-        top_products = execute_query(top_products_query)
+def run_custom_query(input: str) -> list:
+    """Run any SQL query and return the results."""
+    return execute_custom_query(input)
 
-        # Top products by reviews
-        top_reviewed_query = """
-        SELECT p.name AS product_name,
-               COUNT(r.id) AS review_count,
-               AVG(r.rating) AS avg_rating
-        FROM products p
-        LEFT JOIN reviews r ON p.id = r.product_id
-        GROUP BY p.id, p.name
-        ORDER BY avg_rating DESC
-        LIMIT 10;
-        """
-        top_reviewed = execute_query(top_reviewed_query)
-
-        # Inventory summary
-        inventory_query = """
-        SELECT name AS product_name, stock_quantity
-        FROM products
-        ORDER BY stock_quantity ASC;
-        """
-        inventory = execute_query(inventory_query)
-
-        return {
-            "top_products_by_sales": top_products,
-            "top_products_by_reviews": top_reviewed,
-            "inventory_summary": inventory
-        }
-
-    except Exception as e:
-        return {"error": str(e)}
-
-
+@tool
+def get_financial_summary_tool(_: str) -> dict:
+    """Return basic financial summary: total revenue, total cost, total profit"""
+    return get_financial_summary()
 # ----------------- Aggregated Analytics Tools -----------------
 Analytics_tools = [
     get_sale_analytics,
     get_customer_analytics,
-    get_product_analytics
+    run_custom_query, 
+    get_financial_summary_tool
 ]
+
+# ----------------------------- LLM -----------------------------
+llm = get_llm()
+
+# ----------------------------- Parser --------------------------
+output_parser = StructuredOutputParser.from_response_schemas(
+    response_schemas=[
+        {
+            "name": "Action",
+            "description": "The tool to call (must be one of the analytics tools)"
+        },
+        {
+            "name": "Action Input",
+            "description": "JSON input to the tool. If no input is needed, use {}"
+        }
+    ]
+)
+
+# ----------------------- Building the Analytics Agent -----------------
+prompt = get_react_prompt()
+agent = create_react_agent(
+    llm=llm,
+    tools=Analytics_tools,
+    prompt=prompt
+)
+
+executor = AgentExecutor(
+    agent=agent,
+    tools=Analytics_tools,
+    verbose=True,
+    handle_parsing_errors=True,
+    max_iteration=3,
+    early_stopping_method="generate"
+)
+
+def main_analytics_agent():
+    """
+    Interactive Analytics Agent
+    This agent handles all analytics requests and provides comprehensive reports.
+    """
+    print("\n=== Analytics Agent Ready! ===")
+    print("I can provide insights on sales, customers, and products.")
+    print("Examples of commands:")
+    print(" - 'Sales report'           -> Sales analytics")
+    print(" - 'Customer report'        -> Customer analytics")
+    print(" - 'Product report'         -> Product analytics")
+    print("Type 'quit', 'exit', or 'q' to exit.\n")
+
+    while True:
+        user_input = input("Analytics Agent > ").strip()
+        if user_input.lower() in ["quit", "exit", "q"]:
+            print("Exiting Analytics Agent. Goodbye!")
+            break
+        try:
+            result = executor.invoke({"user_input": user_input})
+            print(f"Analytics Agent Response:\n{result['output']}\n")
+        except KeyboardInterrupt:
+            print("Analytics Agent shutting down")
+        except Exception as e:
+            print(f"Error: {e}")
+
+# ------------------------------------ MAIN -----------------------------------------
+if __name__ == "__main__":
+    main_analytics_agent()
