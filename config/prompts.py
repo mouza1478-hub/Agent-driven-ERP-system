@@ -1,6 +1,34 @@
 from langchain.prompts import PromptTemplate
 
 
+from langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+
+def get_sales_prompt():
+    SALES_AGENT_SYSTEM = """
+You are a Sales & CRM Agent. You handle customers, leads, orders, and support tickets.
+
+TOOLS AVAILABLE:
+{tools}
+
+TOOL NAMES:
+{tool_names}
+
+Use the following reasoning format:
+1. Thought: consider the next step
+2. Action: which tool to use
+3. Action Input: input for the tool
+4. Observation: result from the tool
+5. Repeat until done
+6. Final Answer: reply to the user
+
+Use {agent_scratchpad} for reasoning steps.
+Always use the tools appropriately.
+"""
+    return ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template(SALES_AGENT_SYSTEM),
+        HumanMessagePromptTemplate.from_template("{input}")
+    ])
+'''
 def get_sales_prompt(SALES_TOOLS):
     tool_names = [tool.name for tool in SALES_TOOLS]
 
@@ -29,7 +57,7 @@ User Question: {user_input}
         template=template
     )
 
-
+'''
 def get_analytics_prompt(Analytics_tools):
     """
     Prompt template for Analytics Agent with tools injected

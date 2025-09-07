@@ -67,10 +67,11 @@ output_parser = StructuredOutputParser.from_response_schemas(
         {"name": "Action Input", "description": "JSON input to the tool"}
     ]
 )
-
+# --------------------- Tool names for the prompt -----------------
+tool_names = [tool.name for tool in SALES_TOOLS]  
 #--------------------------- prompt -------------------------------------
 
-prompt = get_sales_prompt(SALES_TOOLS)
+prompt = get_sales_prompt()
 # ----------------------- Building the Sales Agent -----------------
 
 agent = create_react_agent(
@@ -111,7 +112,7 @@ def main_smart_sales_agent():
             print("Exiting Smart Router Agent. Goodbye!")
             break
         try:
-            result = executor.invoke({"user_input": user_input})
+            result = executor.invoke({"input": user_input})
             print(f"Smart Router Response: {result['output']}\n")
         except KeyboardInterrupt as e:
             print(f"Sales Agent shutting down")
