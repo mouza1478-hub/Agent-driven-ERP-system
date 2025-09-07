@@ -14,7 +14,7 @@ from langchain.tools import tool
 from langchain.output_parsers import StructuredOutputParser
 from config.llm import get_llm
 from config.prompts import get_sales_prompt
-from tools.database_tools import get_customers, create_customer, get_orders, get_leads, ask_clarification
+from tools.database_tools import get_customers, create_customer, get_orders, get_leads, ask_clarification, execute_query, get_financial_summary
 
 
 # --------------------- Tools for Sales Agent ---------------------
@@ -55,7 +55,7 @@ def ask_clarification(question: str) -> str:
 
 # --------------------- Tools for Sales Agent ---------------------
 
-SALES_TOOLS = [get_customers, create_customer, get_orders, get_leads, ask_clarification]
+SALES_TOOLS = [get_customers, create_customer, get_orders, get_leads, ask_clarification, get_financial_summary]
 
 # ----------------------------- LLM -----------------------------
 llm = get_llm()
@@ -69,6 +69,7 @@ output_parser = StructuredOutputParser.from_response_schemas(
 )
 # --------------------- Tool names for the prompt -----------------
 tool_names = [tool.name for tool in SALES_TOOLS]  
+
 #--------------------------- prompt -------------------------------------
 
 prompt = get_sales_prompt()
@@ -84,10 +85,10 @@ agent = create_react_agent(
 executor = AgentExecutor(
     agent=agent,
     tools=SALES_TOOLS,
-    verbose=True,              # <-- this is where verbose goes now
+    verbose=True,
     handle_parsing_errors=True,
     max_iteration=3,
-    early_stopping_method="generate"
+    early_stopping_method="force"  
 )
 
 def main_smart_sales_agent():

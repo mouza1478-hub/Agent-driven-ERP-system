@@ -81,7 +81,7 @@ def excute_with_sales_agent(user_request:str) -> str: #User quesry as string and
         return f"Sales Agent Response:{result['output']}"
     except Exception as e:
         return f"Sales Agent error: {str(e)}"
-@tool    
+'''@tool    
 def excute_with_finance_agent(user_request:str) -> str: #User quesry as string and returns string
     """
     Excute a request using the Finance Agent for financial data and accounting. 
@@ -104,7 +104,7 @@ def excute_with_inventory_agent(user_request:str) -> str:
         result = inventory_executor.invoke({"input": user_request})
         return f"Inventory Agent Response:{result['output']}"
     except Exception as e:
-        return f"Inventory Agent error: {str(e)}"
+        return f"Inventory Agent error: {str(e)}" '''
 @tool
 def excute_with_analytics_agent(user_request:str) -> str: 
     """
@@ -164,10 +164,10 @@ def classify_and_route(user_request: str) -> str:
 
     if domain == 'sales':
         return excute_with_sales_agent(user_request)
-    elif domain == 'finance':
+    '''elif domain == 'finance':
         return excute_with_finance_agent(user_request)
     if domain == 'inventory':
-        return excute_with_inventory_agent(user_request)
+        return excute_with_inventory_agent(user_request)'''
     if domain == 'analytics':
         return excute_with_analytics_agent(user_request)
     else:
@@ -213,8 +213,8 @@ SMART_ROUTER_TOOLS = [
     classify_and_route,
     get_system_info, 
     excute_with_sales_agent, 
-    excute_with_finance_agent, 
-    excute_with_inventory_agent,
+    '''excute_with_finance_agent, 
+    excute_with_inventory_agent''',
     excute_with_analytics_agent
     ]
 

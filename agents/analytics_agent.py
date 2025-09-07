@@ -3,6 +3,9 @@
 import os 
 import sys
 from pathlib import Path 
+import sqlite3
+from typing import List, Dict
+
 
 #Working with file and directory paths in a platform-independent manner
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -12,7 +15,7 @@ from tools.database_tools import execute_custom_query, get_financial_summary
 from langchain.tools import tool
 from langchain.output_parsers import StructuredOutputParser
 from config.llm import get_llm
-from config.prompts import get_react_prompt
+from config.prompts import get_analytics_prompt
 from config.database import execute_query
 from datetime import datetime, timedelta
 
@@ -121,7 +124,73 @@ NEW CUSTOMERS (LAST 6 MONTHS):
     except Exception as e:
         return {"error": str(e)}
 
+# ----------------- Product Analytics -----------------
+@tool
+def get_product_analytics(_: str) -> dict:
+    """
+    Returns product-related metrics including:
+    - Top 10 products by sales
+    - Top 10 products by reviews
+    - Inventory summary
+    """
+    try:
+        # Top products by sales
+        top_products_query = """
+        SELECT p.name AS product_name,
+               SUM(oi.quantity) AS total_sold,
+               SUM(oi.price * oi.quantity) AS total_revenue
+        FROM products p
+        JOIN order_items oi ON p.id = oi.product_id
+        GROUP BY p.id, p.name
+        ORDER BY total_sold DESC
+        LIMIT 10;
+        """
+        top_products = execute_query(top_products_query)
 
+        # Top products by reviews
+        top_reviewed_query = """
+        SELECT p.name AS product_name,
+               COUNT(r.id) AS review_count,
+               AVG(r.rating) AS avg_rating
+        FROM products p
+        LEFT JOIN reviews r ON p.id = r.product_id
+        GROUP BY p.id, p.name
+        ORDER BY avg_rating DESC
+        LIMIT 10;
+        """
+        top_reviewed = execute_query(top_reviewed_query)
+
+        # Inventory summary
+        inventory_query = """
+        SELECT name AS product_name, stock_quantity
+        FROM products
+        ORDER BY stock_quantity ASC;
+        """
+        inventory = execute_query(inventory_query)
+
+        # Formatted report
+        report = f"""
+PRODUCT ANALYTICS REPORT
+========================
+TOP 10 PRODUCTS BY SALES:
+{chr(10).join([f"- {p['product_name']}: {p['total_sold']} sold, ${p['total_revenue']:.2f}" for p in top_products])}
+
+TOP 10 PRODUCTS BY REVIEWS:
+{chr(10).join([f"- {p['product_name']}: {p['review_count']} reviews, avg rating {p['avg_rating']:.2f}" for p in top_reviewed])}
+
+INVENTORY SUMMARY (Lowest to Highest Stock):
+{chr(10).join([f"- {p['product_name']}: {p['stock_quantity']} units" for p in inventory])}
+""".strip()
+
+        return {
+            "top_products_by_sales": top_products,
+            "top_products_by_reviews": top_reviewed,
+            "inventory_summary": inventory,
+            "report": report
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
 # --------------------------------- Customer Analytics Tool ------------------------
 @tool
 def get_customer_analytics(_: str) -> dict:
@@ -188,19 +257,53 @@ LEAD STATUS:
     except Exception as e:
         return {"error": str(e)}
 @tool
-def run_custom_query(input: str) -> list:
-    """Run any SQL query and return the results."""
+def run_custom_query(input: str) -> List[Dict]:
+    """Run any SQL query (read-only recommended) and return the results."""
     return execute_custom_query(input)
 
 @tool
-def get_financial_summary_tool(_: str) -> dict:
-    """Return basic financial summary: total revenue, total cost, total profit"""
-    return get_financial_summary()
+def get_financial_summary_tool(_: str) -> Dict[str, float]:
+    """
+    Return a basic financial summary:
+    - total revenue
+    - total cost
+    - total profit
+    """
+
+    query = """
+    SELECT 
+        SUM(oi.unit_price * oi.quantity) AS total_revenue,
+        SUM(oi.cost * oi.quantity) AS total_cost,
+        SUM(oi.unit_price * oi.quantity) - SUM(oi.cost * oi.quantity) AS total_profit
+    FROM order_items oi
+    JOIN orders o ON oi.order_id = o.id
+    WHERE o.status = 'completed'
+    """
+
+    try:
+        conn = sqlite3.connect("erp.db")
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(query)
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            return {
+                "total_revenue": result["total_revenue"] or 0.0,
+                "total_cost": result["total_cost"] or 0.0,
+                "total_profit": result["total_profit"] or 0.0
+            }
+        else:
+            return {"total_revenue": 0.0, "total_cost": 0.0, "total_profit": 0.0}
+    except Exception as e:
+        return {"error": str(e)}
 # ----------------- Aggregated Analytics Tools -----------------
 Analytics_tools = [
     get_sale_analytics,
     get_customer_analytics,
-    run_custom_query, 
+    run_custom_query,
+    get_product_analytics, 
     get_financial_summary_tool
 ]
 
@@ -222,7 +325,7 @@ output_parser = StructuredOutputParser.from_response_schemas(
 )
 
 # ----------------------- Building the Analytics Agent -----------------
-prompt = get_react_prompt()
+prompt = get_analytics_prompt()
 agent = create_react_agent(
     llm=llm,
     tools=Analytics_tools,
