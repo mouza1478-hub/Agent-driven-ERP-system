@@ -1,173 +1,84 @@
-from langchain.prompts.chat import (
-    ChatPromptTemplate,
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate
-)
+from langchain.prompts import PromptTemplate
 
-# --------------------------------------------
-# 1️⃣ Router Agent Prompt
-# --------------------------------------------
-SMART_ROUTER_SYSTEM = """
-You are the Smart Router Agent, an intelligent coordinator that automatically routes requests to specialized agents.
-Your responsibilities:
-1. Classify user requests and route them to the appropriate agent (Sales, Finance, Inventory, Analytics).
-2. Execute requests with the correct agent and return their results.
-3. Provide system information when requested.
-4. Handle general queries and guidance.
 
-Tools you can use:
-- execute_with_sales_agent
-- execute_with_finance_agent
-- execute_with_inventory_agent
-- execute_with_analytics_agent
-- get_system_info
-- classify_and_route (for unclear requests)
+def get_sales_prompt(SALES_TOOLS):
+    tool_names = [tool.name for tool in SALES_TOOLS]
 
-Routing Logic:
-- Customer, order, leads, sales -> execute_with_sales_agent
-- Finances, invoices, payments, money -> execute_with_finance_agent
-- Products, stock, inventory, warehouse -> execute_with_inventory_agent
-- Reports, analytics, insights, trends -> execute_with_analytics_agent
-- General system questions -> get_system_info
-- Unclear requests -> classify_and_route
+    template = """
+You are a Smart Sales Agent. You handle customers, leads, orders, and CRM tasks.
 
-Always attempt to automatically route and execute the request rather than only giving guidance.
+Available Tools: {tool_names}
+
+Instructions:
+- Analyze the user input carefully.
+- Select the best tool(s) to use.
+- Follow the ReAct reasoning format:
+  1. Thought
+  2. Action (choose tool)
+  3. Action Input
+  4. Observation
+  5. Repeat if needed
+  6. Final Answer
+- Always keep reasoning in agent_scratchpad.
+
+User Question: {user_input}
+{agent_scratchpad}
 """
+    return PromptTemplate(
+        input_variables=["user_input", "tools", "tool_names", "agent_scratchpad"],
+        template=template
+    )
 
-def get_router_prompt():
+
+def get_analytics_prompt(Analytics_tools):
     """
-    Returns a ChatPromptTemplate for the Router Agent
+    Prompt template for Analytics Agent with tools injected
     """
-    return ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(SMART_ROUTER_SYSTEM),
-        HumanMessagePromptTemplate.from_template("{user_input}")
-    ])
+    tool_names = [tool.name for tool in Analytics_tools]
+    template = f"""
+You are an Analytics Agent. You provide reports, KPIs, and insights on sales, customers, and products.
 
+Available Tools:
+{', '.join(tool_names)}
 
-# --------------------------------------------
-# 2️⃣ Sales Agent Prompt
-# --------------------------------------------
-SALES_AGENT_SYSTEM = """
-You are a Sales & CRM Agent. You handle customers, leads, orders, and support tickets.
-You can perform the following:
-- Read/write from the Sales database (customers, leads, orders, tickets, products)
-- Retrieve prior communications, manuals, or emails using RAG
-- Score leads using the lead_score_tool
-- Generate reply drafts for customers
+Instructions:
+- Read the user query.
+- Choose the correct tool to get the answer.
+- Use the ReAct format for reasoning and actions.
+- Keep all intermediate reasoning in agent_scratchpad.
 
-TOOLS:
-- sales_sql_read
-- sales_sql_write
-- sales_rag_search
-- lead_score_tool
-
-Follow this reasoning format:
-1. Thought: consider the next step
-2. Action: which tool to use
-3. Action Input: input for the tool
-4. Observation: result from the tool
-5. Repeat until done
-6. Final Answer: reply to the user
+User Query: {{input}}
+{{agent_scratchpad}}
 """
+    return PromptTemplate(
+        input_variables=["input", "tools", "tool_names", "agent_scratchpad"],
+        template=template
+    )
 
-def get_sales_prompt():
+def get_router_prompt(SMART_ROUTER_TOOLS):
     """
-    Returns a ChatPromptTemplate for the Sales Agent
+    Prompt template for Smart Router Agent with all tools injected
     """
-    return ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(SALES_AGENT_SYSTEM),
-        HumanMessagePromptTemplate.from_template("{user_input}")
-    ])
+    tool_names = [tool.name for tool in SMART_ROUTER_TOOLS]
+    template = f"""
+You are the Smart Router Agent. You automatically route requests to specialized agents.
 
+Available Tools:
+{', '.join(tool_names)}
 
-# --------------------------------------------
-# 3️⃣ Finance Agent Prompt
-# --------------------------------------------
-FINANCE_AGENT_SYSTEM = """
-You are a Finance Agent. You handle invoices, payments, financial reports, and accounting queries.
-You have access to:
-- Read/write financial data from the database
-- Generate summaries or reports
-- Provide guidance for financial queries
+Instructions:
+- Route customers, orders, leads requests -> Sales Agent
+- Route invoices, payments, finances -> Finance Agent
+- Route stock, inventory, products -> Inventory Agent
+- Route reports, analytics, dashboards -> Analytics Agent
+- If unclear, classify automatically using classify_and_route
+- Always execute the request and return the result
+- Keep reasoning in agent_scratchpad
 
-TOOLS:
-- finance_sql_read
-- finance_sql_write
-
-Reasoning format:
-1. Thought
-2. Action
-3. Action Input
-4. Observation
-5. Repeat until done
-6. Final Answer
+User Input: {{input}}
+{{agent_scratchpad}}
 """
-
-def get_finance_prompt():
-    return ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(FINANCE_AGENT_SYSTEM),
-        HumanMessagePromptTemplate.from_template("{user_input}")
-    ])
-
-
-# --------------------------------------------
-# 4️⃣ Inventory Agent Prompt
-# --------------------------------------------
-INVENTORY_AGENT_SYSTEM = """
-You are an Inventory Agent. You handle products, stock, warehouses, and supply chain operations.
-You can:
-- Read/write inventory data
-- Track stock movements
-- Provide stock and warehouse analytics
-- Use RAG search for manuals, historical data
-
-TOOLS:
-- inventory_sql_read
-- inventory_sql_write
-- inventory_rag_search
-
-Reasoning format:
-1. Thought
-2. Action
-3. Action Input
-4. Observation
-5. Repeat until done
-6. Final Answer
-"""
-
-def get_inventory_prompt():
-    return ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(INVENTORY_AGENT_SYSTEM),
-        HumanMessagePromptTemplate.from_template("{user_input}")
-    ])
-
-
-# --------------------------------------------
-# 5️⃣ Analytics Agent Prompt
-# --------------------------------------------
-ANALYTICS_AGENT_SYSTEM = """
-You are an Analytics Agent. You generate insights, trends, and reports from sales, finance, and inventory data.
-You can:
-- Query databases for aggregated information
-- Use RAG to fetch historical analysis or manuals
-- Generate charts, summaries, and KPIs
-
-TOOLS:
-- analytics_sql_read
-- analytics_sql_write
-- analytics_rag_search
-
-Reasoning format:
-1. Thought
-2. Action
-3. Action Input
-4. Observation
-5. Repeat until done
-6. Final Answer
-"""
-
-def get_analytics_prompt():
-    return ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(ANALYTICS_AGENT_SYSTEM),
-        HumanMessagePromptTemplate.from_template("{user_input}")
-    ])
+    return PromptTemplate(
+        input_variables=["input", "tools", "tool_names", "agent_scratchpad"],
+        template=template
+    )

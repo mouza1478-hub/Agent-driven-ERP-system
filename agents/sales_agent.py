@@ -3,6 +3,8 @@
 import os 
 import sys
 from pathlib import Path 
+import json
+
 
 #Working with file and directory paths in a platform-independent manner
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -11,9 +13,8 @@ from langchain.agents import create_react_agent, AgentExecutor
 from langchain.tools import tool
 from langchain.output_parsers import StructuredOutputParser
 from config.llm import get_llm
-from config.prompts import get_react_prompt
-from langchain.output_parsers import StructuredOutputParser
-
+from config.prompts import get_sales_prompt
+from tools.database_tools import get_customers, create_customer, get_orders, get_leads, ask_clarification
 
 
 # --------------------- Tools for Sales Agent ---------------------
@@ -31,7 +32,7 @@ def get_customers(input_text: str) -> str:
     names = [c["name"] for c in data]
     return ", ".join(names)
 
-
+'''
 @tool
 def create_customer(input_text: str) -> str:
     """Add a new customer to the database"""
@@ -49,7 +50,10 @@ def get_leads(input_text: str) -> str:
 @tool
 def ask_clarification(question: str) -> str:
     """Prompt the user for clarification."""
-    return f"Clarification needed: {question}"
+    return f"Clarification needed: {question}" 
+'''
+
+# --------------------- Tools for Sales Agent ---------------------
 
 SALES_TOOLS = [get_customers, create_customer, get_orders, get_leads, ask_clarification]
 
@@ -59,29 +63,16 @@ llm = get_llm()
 # ----------------------------- Parser --------------------------
 output_parser = StructuredOutputParser.from_response_schemas(
     response_schemas=[
-        {
-            "name": "Action",
-            "description": "The name of the tool to call"
-        },
-        {
-            "name": "Action Input",
-            "description": "JSON input to the tool"
-        }
+        {"name": "Action", "description": "The name of the tool to call"},
+        {"name": "Action Input", "description": "JSON input to the tool"}
     ]
 )
 
+#--------------------------- prompt -------------------------------------
+
+prompt = get_sales_prompt(SALES_TOOLS)
 # ----------------------- Building the Sales Agent -----------------
 
-output_parser = StructuredOutputParser.from_response_schemas(
-    response_schemas=[{
-        "name": "Action",
-        "description": "The tool to call, must be one of: get_customers, create_customer, get_orders, get_leads"
-    }, {
-        "name": "Action Input",
-        "description": "The JSON input for the tool. If no input is needed, use {}"
-    }]
-)
-prompt = get_react_prompt()
 agent = create_react_agent(
     llm=llm,
     tools=SALES_TOOLS,

@@ -40,8 +40,8 @@ from config.llm import get_llm
 
 # Import domain agents (must exist in Agents folder)
 from agents.sales_agent import executor as sales_executor
-from agents.finance_agent import executor as finance_executor
-from agents.inventory_agent import executor as inventory_executor
+#from agents.finance_agent import executor as finance_executor
+#from agents.inventory_agent import executor as inventory_executor
 from agents.analytics_agent import executor as analytics_executor
 
 #--------------------------------- DATABASE HELPER --------------------------------------
