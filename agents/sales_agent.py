@@ -18,7 +18,7 @@ from tools.database_tools import get_customers, create_customer, get_orders, get
 
 
 # --------------------- Tools for Sales Agent ---------------------
-
+'''
 @tool
 def get_customers(input_text: str) -> str:
     """Fetch all customer info from the database"""
@@ -32,7 +32,7 @@ def get_customers(input_text: str) -> str:
     names = [c["name"] for c in data]
     return ", ".join(names)
 
-'''
+
 @tool
 def create_customer(input_text: str) -> str:
     """Add a new customer to the database"""
@@ -71,7 +71,6 @@ output_parser = StructuredOutputParser.from_response_schemas(
 tool_names = [tool.name for tool in SALES_TOOLS]  
 
 #--------------------------- prompt -------------------------------------
-
 prompt = get_sales_prompt()
 # ----------------------- Building the Sales Agent -----------------
 
