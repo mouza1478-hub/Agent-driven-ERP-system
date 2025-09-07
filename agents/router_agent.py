@@ -29,21 +29,20 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 #Working with file and directory paths in a platform-independent manner
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-
 # LangChain imports
+from config.prompts import get_router_prompt
 from langchain.memory.buffer_window import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain.tools import tool
 from config.llm import get_llm
-from config.prompts import get_react_promp
 
 
 # Import domain agents (must exist in Agents folder)
-'''from agents.sales_agent import executor as sales_executor
+from agents.sales_agent import executor as sales_executor
 from agents.finance_agent import executor as finance_executor
 from agents.inventory_agent import executor as inventory_executor
-from agents.analytics_agent import executor as analytics_executor'''
+from agents.analytics_agent import executor as analytics_executor
 
 #--------------------------------- DATABASE HELPER --------------------------------------
 #  ----- Get Connected with you DB file rep.db and explore its content for logging/registry tool
@@ -236,7 +235,8 @@ memory = get_memory()
     ("system", SMART_ROUTER_SYSTEM),
     ("human", "{user_input}")
 ])'''
-prompt = get_react_promp()
+prompt = get_router_prompt()
+()
 
 #----------------------------- The prompt of the system ------------------------------
 SMART_ROUTER_SYSTEM = """ You are the smart router Agent, an intelligent coordinator that automatically. routes request to specialized agents.

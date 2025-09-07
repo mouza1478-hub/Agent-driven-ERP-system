@@ -1,72 +1,15 @@
 import sqlite3
 from typing import List, Dict, Optional
+from langchain.tools import tool
 
 DB_PATH = "erp.db"
 
 
 # ----------------- Sales Agent Tools ----------------------------------------
 
-# ------------------------- Database Connection -------------------------
-conn = sqlite3.connect(DB_PATH)
-cursor = conn.cursor()
-# Customers
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS customers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-)
-""")
-
-# Orders
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER,
-    total REAL,
-    status TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(customer_id) REFERENCES customers(id)
-)
-""")
-
-# Products
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    cost REAL,
-    price REAL,
-    stock_quantity INTEGER
-)
-""")
-
-# Leads
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS leads (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    contact_email TEXT,
-    status TEXT,
-    score REAL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-)
-""")
-
-# Insert sample data
-cursor.execute("INSERT INTO customers (name, email, phone) VALUES ('Alice', 'alice@example.com', '1111111111')")
-cursor.execute("INSERT INTO customers (name, email, phone) VALUES ('Bob', 'bob@example.com', '2222222222')")
-cursor.execute("INSERT INTO orders (customer_id, total, status) VALUES (1, 100.0, 'completed')")
-cursor.execute("INSERT INTO orders (customer_id, total, status) VALUES (2, 200.0, 'pending')")
-cursor.execute("INSERT INTO products (name, cost, price, stock_quantity) VALUES ('Product A', 50, 80, 100)")
-cursor.execute("INSERT INTO products (name, cost, price, stock_quantity) VALUES ('Product B', 30, 60, 200)")
-cursor.execute("INSERT INTO leads (contact_email, status, score) VALUES ('lead1@example.com', 'new', 80)")
-cursor.execute("INSERT INTO leads (contact_email, status, score) VALUES ('lead2@example.com', 'contacted', 90)")
-
-conn.commit()
-conn.close()
-def execute_query(query: str, params: tuple = ()) -> List[Dict[str, any]]:
+# ------------------------- Core Query Tool -------------------------
+@tool
+def execute_query(query: str, params: tuple = ()) -> List[Dict]:
     """Execute a SQL query and return results as a list of dicts."""
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -79,6 +22,9 @@ def execute_query(query: str, params: tuple = ()) -> List[Dict[str, any]]:
     except Exception as e:
         return [{"error": str(e)}]
 
+
+# ------------------------- Table Tools -------------------------
+@tool
 def get_table_names() -> List[str]:
     """Return a list of table names in the SQLite database."""
     try:
@@ -90,6 +36,10 @@ def get_table_names() -> List[str]:
         return tables
     except Exception as e:
         return [f"Error fetching tables: {str(e)}"]
+
+
+# ------------------------- Customer Tools -------------------------
+@tool
 def get_customers(
     name: Optional[str] = None,
     email: Optional[str] = None,
@@ -120,10 +70,10 @@ def get_customers(
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
-
     return [dict(row) for row in rows]
 
 
+@tool
 def create_customer(name: str, email: str, phone: str) -> str:
     """Add a new customer to the database."""
     conn = sqlite3.connect(DB_PATH)
@@ -137,6 +87,8 @@ def create_customer(name: str, email: str, phone: str) -> str:
     return f"Customer '{name}' created successfully."
 
 
+# ------------------------- Orders Tools -------------------------
+@tool
 def get_orders(customer_id: Optional[int] = None, order_id: Optional[int] = None) -> List[Dict]:
     """Return all orders, or filter by customer_id or order_id."""
     conn = sqlite3.connect(DB_PATH)
@@ -155,9 +107,11 @@ def get_orders(customer_id: Optional[int] = None, order_id: Optional[int] = None
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
-
     return [dict(row) for row in rows]
 
+
+# ------------------------- Leads Tools -------------------------
+@tool
 def get_leads(
     lead_id: Optional[int] = None,
     contact_email: Optional[str] = None,
@@ -184,38 +138,27 @@ def get_leads(
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
-
     return [dict(row) for row in rows]
 
+#---------------------- Clarification --------------------------
+@tool
+def ask_clarification(question: str) -> str:
+    """Prompt the user for clarification."""
+    return f"Clarification needed: {question}"
 
-# ------------------------- Analytics Helpers -------------------------
-def execute_custom_query(query: str, params: tuple = ()) -> List[Dict]:
-    """
-    Execute any custom SQL query and return results as a list of dicts.
-    Works like a wrapper around execute_query to be used by Analytics Agent.
-    """
-    return execute_query(query, params)
-
-
+# ------------------------- Financial Summary Tool -------------------------
+@tool
 def get_financial_summary() -> Dict[str, float]:
-    """
-    Return a basic financial summary calculated from the database:
-    - Total revenue (sum of all orders)
-    - Total cost (sum of all product costs, if 'cost' column exists)
-    - Total profit (revenue - cost)
-    """
+    """Return total revenue, total cost, and total profit."""
     try:
-        # Total revenue
         revenue_query = "SELECT SUM(total) as total_revenue FROM orders;"
         revenue_res = execute_query(revenue_query)
         total_revenue = revenue_res[0].get('total_revenue', 0) if revenue_res else 0
 
-        # Total cost
-        cost_query = "SELECT SUM(cost) as total_cost FROM products;"  # assumes cost column exists
+        cost_query = "SELECT SUM(cost) as total_cost FROM products;"
         cost_res = execute_query(cost_query)
         total_cost = cost_res[0].get('total_cost', 0) if cost_res else 0
 
-        # Profit
         total_profit = (total_revenue or 0) - (total_cost or 0)
 
         return {
@@ -225,42 +168,41 @@ def get_financial_summary() -> Dict[str, float]:
         }
     except Exception as e:
         return {"error": str(e)}
-    
 
-def test_database_tools():
-    print("\n=== Testing Database Tools ===\n")
-    
-    # 1️⃣ Check tables in the database
-    tables = get_table_names()
-    print("Tables in DB:", tables)
-    print("-" * 50)
 
-    # 2️⃣ Get first 3 customers
-    customers = get_customers()
-    print("Sample Customers:", customers[:3])
-    print("-" * 50)
+# ------------------------- Analytics Helpers -------------------------
+@tool
+def execute_custom_query(query: str, params: tuple = ()) -> List[Dict]:
+    """
+    Execute any custom SQL query and return results as a list of dictionaries.
+    """
+    return execute_query(query, params)
 
-    # 3️⃣ Add a test customer
-    print("Creating test customer...")
-    result = create_customer("Test User", "test@example.com", "1234567890")
-    print(result)
-    print("-" * 50)
 
-    # 4️⃣ Get orders (first 3)
-    orders = get_orders()
-    print("Sample Orders:", orders[:3])
-    print("-" * 50)
+@tool
+def get_financial_summary() -> Dict[str, float]:
+    """
+    Returns a basic financial summary:
+    - total revenue
+    - total cost
+    - total profit
+    """
+    try:
+        revenue_query = "SELECT SUM(total) as total_revenue FROM orders;"
+        revenue_res = execute_query(revenue_query)
+        total_revenue = revenue_res[0].get('total_revenue', 0) if revenue_res else 0
 
-    # 5️⃣ Get leads (first 3)
-    leads = get_leads()
-    print("Sample Leads:", leads[:3])
-    print("-" * 50)
+        cost_query = "SELECT SUM(cost) as total_cost FROM products;"
+        cost_res = execute_query(cost_query)
+        total_cost = cost_res[0].get('total_cost', 0) if cost_res else 0
 
-    # 6️⃣ Execute custom query
-    query = "SELECT COUNT(*) as total_orders FROM orders;"
-    custom_result = execute_query(query)
-    print("Custom Query Result:", custom_result)
-    print("-" * 50)
-''''
-if __name__ == "__main__":
-    test_database_tools()'''
+        total_profit = (total_revenue or 0) - (total_cost or 0)
+
+        return {
+            "total_revenue": total_revenue or 0,
+            "total_cost": total_cost or 0,
+            "total_profit": total_profit
+        }
+    except Exception as e:
+        return {"error": str(e)}
+

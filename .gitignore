@@ -5,7 +5,8 @@ __pycache__/
 
 # C extensions
 *.so
-
+*.env
+langchain/API_KRY.env
 # Distribution / packaging
 .Python
 build/
